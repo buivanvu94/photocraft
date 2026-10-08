@@ -1353,32 +1353,24 @@ pub fn confirm(app: &mut PhotocraftApp, f: &Map<String, Value>) -> Result<Value,
             // commands included, which the engine doesn't know).
             let mut ov: BTreeMap<String, String> = serde_json::from_value(overrides).unwrap_or_default();
             let items = shortcut_items(app);
-            let before_shortcuts = app.session.prefs().shortcuts.clone();
-            let changed: Vec<(String, String)> = ov
-                .iter()
-                .filter(|(id, s)| !s.is_empty() && before_shortcuts.get(*id).map(String::as_str) != Some(s.as_str()))
-                .map(|(k, s)| (k.clone(), s.clone()))
-                .collect();
-            let to_check = if changed.is_empty() {
-                ov.iter().filter(|(_, s)| !s.is_empty()).map(|(k, s)| (k.clone(), s.clone())).collect()
-            } else {
-                changed
-            };
-            for (id, sc) in to_check {
-                if ov.get(&id).is_some_and(|s| s.is_empty()) {
-                    continue;
+            // Newly assigned shortcuts are checked first and take theirs from any holder, custom
+            // overrides included; unchanged overrides only take theirs from defaults.
+            let before = &app.session.prefs().shortcuts;
+            let mut todo: Vec<(String, String, bool)> =
+                ov.iter().filter(|(_, s)| !s.is_empty()).map(|(k, s)| (k.clone(), s.clone(), before.get(k) != Some(s))).collect();
+            todo.sort_by_key(|(_, _, new)| !new);
+            for (id, sc, new) in todo {
+                if ov.get(&id).is_some_and(String::is_empty) {
+                    continue; // taken by a newer assignment
                 }
                 let norm = prefs::normalize_shortcut(&sc);
                 for (other, _, _, def) in &items {
-                    if *other == id {
-                        continue;
-                    }
-                    let other_sc = match ov.get(other) {
-                        Some(s) if s.is_empty() => None,
-                        Some(s) => Some(s.as_str()),
+                    let held = match ov.get(other) {
+                        Some(s) if new => Some(s.as_str()),
+                        Some(_) => None,
                         None => def.as_deref(),
                     };
-                    if other_sc.and_then(prefs::normalize_shortcut) == norm {
+                    if *other != id && held.and_then(prefs::normalize_shortcut) == norm {
                         ov.insert(other.clone(), String::new());
                     }
                 }
@@ -1964,6 +1956,24 @@ mod tests {
         crate::dialogs::confirm(&mut app, id2).unwrap();
         assert_eq!(effective_shortcut(&app, "layer.new.group", None).as_deref(), Some("Cmd+O"));
         assert_eq!(effective_shortcut(&app, "layer.new.layer", None), None, "taken from layer.new.layer override");
+
+        // OK with nothing changed keeps every shortcut where it is.
+        let id3 = crate::menus::invoke(&mut app, &ctx, "edit.keyboardShortcuts", json!({})).unwrap()["dialog"].as_u64().unwrap();
+        let unchanged = app.session.prefs().shortcuts.clone();
+        app.ui.dialog_mut(id3).unwrap().fields.insert("overrides".into(), json!(unchanged));
+        crate::dialogs::confirm(&mut app, id3).unwrap();
+        assert_eq!(app.session.prefs().shortcuts, unchanged);
+
+        // Giving the shortcut back to Layer › New › Layer takes it from the group override; a
+        // cleared override (empty) holds nothing and is left alone.
+        let id4 = crate::menus::invoke(&mut app, &ctx, "edit.keyboardShortcuts", json!({})).unwrap()["dialog"].as_u64().unwrap();
+        let mut ov = app.session.prefs().shortcuts.clone();
+        ov.insert("layer.new.layer".into(), "Cmd+O".into());
+        app.ui.dialog_mut(id4).unwrap().fields.insert("overrides".into(), json!(ov));
+        crate::dialogs::confirm(&mut app, id4).unwrap();
+        assert_eq!(effective_shortcut(&app, "layer.new.layer", None).as_deref(), Some("Cmd+O"));
+        assert_eq!(effective_shortcut(&app, "layer.new.group", None), None, "taken back from the group");
+        assert_eq!(effective_shortcut(&app, "file.open", Some("Cmd+O")), None, "File › Open stays cleared");
     }
 
     #[test]

@@ -185,11 +185,7 @@ pub(crate) fn spin(src: &Image, out: Rect, ctx: &Ctx, pins: &[SpinPin]) -> Vec<f
             let theta = p.blur_angle.clamp(0.0, 360.0).to_radians();
             let rpx = (e * p.radius_x.max(p.radius_y) * ss).max(0.0);
             // ~2 px between samples along the arc is smooth enough for a blur and halves the cost.
-            let m = if rpx.is_finite() && theta.is_finite() {
-                ((theta * rpx / 2.0).ceil() as usize).clamp(2, 64)
-            } else {
-                2
-            };
+            let m = if rpx.is_finite() && theta.is_finite() { ((theta * rpx / 2.0).ceil() as usize).clamp(2, 64) } else { 2 };
             let (cx, cy) = (b.x0 as f32 + p.x * b.width() as f32, b.y0 as f32 + p.y * b.height() as f32);
             let angle_deg = if p.angle.is_finite() { p.angle } else { 0.0 };
             let (sa, ca) = angle_deg.to_radians().sin_cos();
