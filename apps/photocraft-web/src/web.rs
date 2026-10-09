@@ -18,6 +18,18 @@ const OPEN_EXTS: &[&str] = &[
     "pcraft", "psd", "psb", "psdt", "png", "jpg", "jpeg", "tif", "tiff", "webp", "gif", "bmp", "tga", "ico", "qoi", "exr", "hdr", "pbm", "pgm", "ppm", "pam",
     "pfm", "heic", "heif", "hif", "dng", "cr2", "cr3", "nef", "nrw", "arw", "pef", "orf", "rw2", "raf", "abr", "grd", "svg", "svgz", "aco", "ase",
 ];
+
+fn open_filter_extensions() -> Vec<String> {
+    let mut exts = Vec::with_capacity(OPEN_EXTS.len() * 2);
+    for &e in OPEN_EXTS {
+        exts.push(e.to_ascii_lowercase());
+        let upper = e.to_ascii_uppercase();
+        if upper != e {
+            exts.push(upper);
+        }
+    }
+    exts
+}
 const CANVAS_ID: &str = "photocraft_canvas";
 
 pub fn start() {
@@ -178,7 +190,12 @@ fn services(inbox: Inbox) -> Services {
         file_dialog: Some(Box::new(|request, _parent, reply| match request {
             // The browser's file picker hands over the file's contents, not a path.
             FileDialogRequest::Open { .. } => wasm_bindgen_futures::spawn_local(async move {
-                let picked = rfd::AsyncFileDialog::new().add_filter("All Formats", OPEN_EXTS).pick_file().await;
+                let open_exts = open_filter_extensions();
+                let picked = rfd::AsyncFileDialog::new()
+                    .add_filter("All Formats", &open_exts)
+                    .add_filter("All Files", &["*"])
+                    .pick_file()
+                    .await;
                 let answer = match picked {
                     Some(file) => Some(FileDialogAnswer::Contents(file.file_name(), file.read().await)),
                     None => None,

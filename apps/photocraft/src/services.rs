@@ -20,6 +20,21 @@ const OPEN_EXTS: &[&str] = &[
     "pfm", "heic", "heif", "hif", "dng", "cr2", "cr3", "nef", "nrw", "arw", "pef", "orf", "rw2", "raf", "abr", "grd", "svg", "svgz", "aco", "ase",
 ];
 
+/// Lists extensions accepted by File › Open dialogs in both lowercase and uppercase,
+/// so case-sensitive file pickers (such as GTK / Linux) display camera RAW and photos
+/// saved with uppercase extensions (e.g. .JPG, .NEF, .CR2, .PNG) (#1506).
+fn open_filter_extensions() -> Vec<String> {
+    let mut exts = Vec::with_capacity(OPEN_EXTS.len() * 2);
+    for &e in OPEN_EXTS {
+        exts.push(e.to_ascii_lowercase());
+        let upper = e.to_ascii_uppercase();
+        if upper != e {
+            exts.push(upper);
+        }
+    }
+    exts
+}
+
 /// File › Save As formats: (filter name, extensions). The filter matching the suggested name's
 /// extension comes first, so a .pcraft document saves as .pcraft by default and everything else
 /// keeps defaulting to Photoshop.
@@ -66,7 +81,11 @@ fn show_file_dialog(request: FileDialogRequest, parent: Option<&eframe::Frame>, 
     }
     let answer: Pin<Box<dyn Future<Output = Option<FileDialogAnswer>> + Send>> = match request {
         FileDialogRequest::Open { multiple } => {
-            let dialog = dialog.add_filter("All Formats", OPEN_EXTS).add_filter("PhotoCraft", &["pcraft"]);
+            let open_exts = open_filter_extensions();
+            let dialog = dialog
+                .add_filter("All Formats", &open_exts)
+                .add_filter("PhotoCraft", &["pcraft", "PCRAFT"])
+                .add_filter("All Files", &["*"]);
             if multiple {
                 let picked = dialog.pick_files();
                 Box::pin(async move { picked.await.map(|files| FileDialogAnswer::Paths(files.iter().map(path_of).collect())) })
@@ -645,5 +664,18 @@ mod tests {
         std::fs::write(&bin, tga_1x1()).unwrap();
         assert_eq!(image_from_files(&[tga]), Some((1, 1, vec![255, 0, 0, 255])));
         assert!(image_from_files(&[bin]).is_none());
+    }
+
+    #[test]
+    fn open_filters_include_both_lowercase_and_uppercase_extensions() {
+        let exts = open_filter_extensions();
+        assert!(exts.contains(&"jpg".to_string()));
+        assert!(exts.contains(&"JPG".to_string()));
+        assert!(exts.contains(&"nef".to_string()));
+        assert!(exts.contains(&"NEF".to_string()));
+        assert!(exts.contains(&"png".to_string()));
+        assert!(exts.contains(&"PNG".to_string()));
+        assert!(exts.contains(&"cr2".to_string()));
+        assert!(exts.contains(&"CR2".to_string()));
     }
 }
