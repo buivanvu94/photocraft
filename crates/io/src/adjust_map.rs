@@ -668,6 +668,7 @@ pub fn write(adj: &Adjustment) -> Vec<([u8; 4], Vec<u8>)> {
         }
         Adjustment::PhotoFilter { color, density, preserve_luminosity } => {
             // Version 2: an RGB colour structure keeps the colour at 16 bits.
+            // Photoshop expects the `phfl` block data padded to a 4-byte boundary (20 bytes, #1455).
             put16(&mut v, 2);
             put16(&mut v, 0);
             for x in color {
@@ -676,7 +677,9 @@ pub fn write(adj: &Adjustment) -> Vec<([u8; 4], Vec<u8>)> {
             put16(&mut v, 0);
             v.extend_from_slice(&((density.clamp(0.0, 1.0) * 100.0).round() as u32).to_be_bytes());
             v.push(u8::from(*preserve_luminosity));
-            v.push(0);
+            while v.len() % 4 != 0 {
+                v.push(0);
+            }
             return vec![(*b"phfl", v)];
         }
         Adjustment::ChannelMixer { matrix, monochrome } => {
@@ -923,12 +926,19 @@ mod tests {
         let mut v2 = i16s(&[2, 0]);
         v2.extend([0xff, 0xff, 0x80, 0x00, 0, 0, 0, 0]);
         v2.extend(40u32.to_be_bytes());
-        v2.extend([1, 0]);
+        v2.extend([1, 0, 0, 0]);
+        assert_eq!(v2.len(), 20, "phfl version 2 is 20 bytes long");
         let a = parse(b"phfl", &v2, None, Channels::Rgb);
         let Adjustment::PhotoFilter { color, density, preserve_luminosity: true } = a else { panic!("{a:?}") };
         assert_eq!(color, [1.0, 32768.0 / 65535.0, 0.0]);
         assert_eq!(density, 0.4);
-        assert_eq!(write(&a)[0].1, v2, "version 2 RGB is written back byte-exact");
+        let written = write(&a);
+        assert_eq!(written[0].1, v2, "version 2 RGB is written back byte-exact");
+        assert_eq!(written[0].1.len() % 4, 0, "phfl block must be padded to a 4-byte boundary for Photoshop compatibility");
+        // Legacy 18-byte block parses successfully as well.
+        let v2_legacy = v2[..18].to_vec();
+        let a_legacy = parse(b"phfl", &v2_legacy, None, Channels::Rgb);
+        assert_eq!(a_legacy, a);
         // Version 2, Lab colour structure: L 50, a 0, b 0 is mid gray.
         let mut lab = i16s(&[2, 7, 5000, 0, 0, 0]);
         lab.extend(25u32.to_be_bytes());
