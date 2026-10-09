@@ -142,10 +142,9 @@ impl Headless {
                 warnings
             }
         };
-        let is_native = format
-            .map(|f| f.trim_start_matches('.').eq_ignore_ascii_case("pcraft"))
-            .unwrap_or_else(|| target.extension().is_some_and(|e| e.eq_ignore_ascii_case("pcraft")));
-        if is_native {
+        let is_layered = file_cmds::saves_in_place(target_text)
+            || format.is_some_and(|f| matches!(f.trim_start_matches('.').to_ascii_lowercase().as_str(), "psd" | "psb" | "pcraft"));
+        if is_layered {
             // Saving by index must not retarget the next automation command.
             let previously_active = self.session.active_index();
             self.session.set_active(i);

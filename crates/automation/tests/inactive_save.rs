@@ -34,3 +34,39 @@ fn indexed_native_save_preserves_active_document_and_future_command_target() {
     drop(headless);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn pathless_psd_save_clears_dirty_flag() {
+    let dir = std::env::temp_dir().join(format!(
+        "pc-pathless-save-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    for ext in ["psd", "psb", "pcraft"] {
+        let file_path = dir.join(format!("test.{ext}"));
+        let mut headless = Headless::trusted_local();
+        headless.handle("doc.new", json!({"width": 8, "height": 8, "background": "white", "name": "doc"})).unwrap();
+        headless.handle("doc.save", json!({"path": file_path.to_str().unwrap()})).unwrap();
+
+        // Edit the document:
+        headless.handle("engine.execute", json!({"command": "image.adjustments.invert", "params": {}})).unwrap();
+        assert!(headless.session.active().unwrap().is_dirty(), "{ext} should be dirty after edit");
+
+        // Pathless save back to its own file (#1547):
+        let res = headless.handle("doc.save", json!({})).unwrap();
+        assert_eq!(res["path"].as_str(), Some(file_path.to_string_lossy().as_ref()));
+        assert!(!headless.session.active().unwrap().is_dirty(), "{ext} should be clean after pathless save");
+
+        // Second pathless save keeps it clean:
+        headless.handle("doc.save", json!({})).unwrap();
+        assert!(!headless.session.active().unwrap().is_dirty(), "{ext} should still be clean after second save");
+
+        // Another edit makes it dirty again:
+        headless.handle("engine.execute", json!({"command": "image.adjustments.invert", "params": {}})).unwrap();
+        assert!(headless.session.active().unwrap().is_dirty(), "{ext} should be dirty after second edit");
+    }
+
+    std::fs::remove_dir_all(dir).unwrap();
+}
