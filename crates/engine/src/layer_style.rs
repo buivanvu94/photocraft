@@ -710,7 +710,91 @@ pub fn specs() -> Vec<CommandSpec> {
             },
             journal: true,
         },
+        CommandSpec {
+            id: "layer.layerStyle.setVisible",
+            label: "Layer Style Visibility",
+            menu: &[],
+            shortcut: None,
+            params: r##"{"layer":id?,"index":0..N?,"visible":bool? (default: toggle)}"##,
+            enabled: has_layer,
+            run: set_visible,
+            journal: true,
+        },
+        CommandSpec {
+            id: "layer.setEffectVisible",
+            label: "Layer Style Visibility",
+            menu: &[],
+            shortcut: None,
+            params: r##"{"layer":id?,"index":0..N?,"visible":bool? (default: toggle)}"##,
+            enabled: has_layer,
+            run: set_visible,
+            journal: true,
+        },
+        CommandSpec {
+            id: "layer.effects.setVisible",
+            label: "Layer Style Visibility",
+            menu: &[],
+            shortcut: None,
+            params: r##"{"layer":id?,"index":0..N?,"visible":bool? (default: toggle)}"##,
+            enabled: has_layer,
+            run: set_visible,
+            journal: true,
+        },
     ]
+}
+
+fn set_visible(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "layer.layerStyle.setVisible";
+    let id = match p.get("layer").and_then(Value::as_u64) {
+        Some(id) => photocraft_doc::LayerId(id),
+        None => s.active().and_then(|d| d.active_layer).ok_or_else(|| EngineError::Other("no active layer".into()))?,
+    };
+    let want = p.get("visible").or_else(|| p.get("enabled")).and_then(Value::as_bool);
+    let index = p.get("index").and_then(Value::as_u64).map(|i| i as usize);
+
+    let (label, new_val) = {
+        let doc = &s.active().ok_or(EngineError::NoDocument)?.doc;
+        let l = doc.layer(id).ok_or(EngineError::NoLayer(id))?;
+        if l.effects.items.is_empty() {
+            return Err(bad(CMD, format!("layer {} has no effects", id.0)));
+        }
+        match index {
+            None => {
+                let current = l.effects.enabled;
+                let target = want.unwrap_or(!current);
+                let label = if target { "Show All Effects".to_string() } else { "Hide All Effects".to_string() };
+                (label, target)
+            }
+            Some(i) => {
+                let fx = l.effects.items.get(i).ok_or_else(|| {
+                    bad(CMD, format!("effect index {i} out of bounds (layer has {} effects)", l.effects.items.len()))
+                })?;
+                let current = fx.enabled();
+                let target = want.unwrap_or(!current);
+                let label = format!("{} {}", if target { "Show" } else { "Hide" }, fx.label());
+                (label, target)
+            }
+        }
+    };
+
+    s.edit(&label, |doc, _| {
+        let l = doc.layer_mut(id).ok_or(EngineError::NoLayer(id))?;
+        l.effects.psd_raw = None;
+        match index {
+            None => {
+                l.effects.enabled = new_val;
+            }
+            Some(i) => {
+                let fx = l.effects.items.get_mut(i).ok_or_else(|| {
+                    bad(CMD, format!("effect index {i} out of bounds"))
+                })?;
+                fx.set_enabled(new_val);
+            }
+        }
+        Ok(())
+    })?;
+
+    Ok(json!({ "layer": id.0, "visible": new_val }))
 }
 
 #[cfg(test)]
@@ -995,5 +1079,91 @@ mod tests {
         let entries: Vec<Value> = items.iter().map(|fx| json!({"kind": "stroke", "fx": serde_json::to_value(fx).unwrap(), "params": {}})).collect();
         s.execute("layer.layerStyle.replace", json!({"layer": id.0, "effects": entries})).unwrap();
         assert_eq!(px(&mut s, 24, 14), before, "both strokes render identically after the round trip");
+    }
+
+    #[test]
+    fn hidden_effect_does_not_change_composite_and_undo_restores() {
+        let mut s = Session::new();
+        s.execute("file.new", json!({"width": 16, "height": 16})).unwrap();
+        s.execute("edit.fill", json!({"color": "#ff0000"})).unwrap();
+        let pixel = |s: &mut Session| -> [f32; 3] {
+            let px: Vec<f32> = serde_json::from_value(s.execute("document.pixel", json!({"x": 8, "y": 8})).unwrap()).unwrap();
+            [px[0], px[1], px[2]]
+        };
+        let base_red = pixel(&mut s);
+        assert!(base_red[0] > 0.9 && base_red[2] < 0.1, "base pixel is red: {base_red:?}");
+
+        s.execute("layer.layerStyle.colorOverlay", json!({"color": "#0000ff"})).unwrap();
+        let with_overlay = pixel(&mut s);
+        assert!(with_overlay[0] < 0.1 && with_overlay[2] > 0.9, "overlay pixel is blue: {with_overlay:?}");
+
+        // Hide individual effect at index 0.
+        s.execute("layer.layerStyle.setVisible", json!({"index": 0, "visible": false})).unwrap();
+        let hidden = pixel(&mut s);
+        assert_eq!(hidden, base_red, "hidden effect does not change the composite");
+
+        // Undo restores the visible effect.
+        s.execute("edit.undo", json!({})).unwrap();
+        assert_eq!(pixel(&mut s), with_overlay, "undo restores visible effect");
+
+        // Redo re-hides the effect.
+        s.execute("edit.redo", json!({})).unwrap();
+        assert_eq!(pixel(&mut s), base_red, "redo hides effect again");
+
+        // Toggle visibility back on (omitting visible toggles).
+        s.execute("layer.layerStyle.setVisible", json!({"index": 0})).unwrap();
+        assert_eq!(pixel(&mut s), with_overlay, "toggle restores effect");
+
+        // Alias layer.setEffectVisible also works.
+        s.execute("layer.setEffectVisible", json!({"index": 0, "visible": false})).unwrap();
+        assert_eq!(pixel(&mut s), base_red, "alias hides effect");
+    }
+
+    #[test]
+    fn hidden_effects_group_does_not_change_composite_and_undo_restores() {
+        let mut s = Session::new();
+        s.execute("file.new", json!({"width": 16, "height": 16})).unwrap();
+        s.execute("edit.fill", json!({"color": "#00ff00"})).unwrap();
+        let pixel = |s: &mut Session| -> [f32; 3] {
+            let px: Vec<f32> = serde_json::from_value(s.execute("document.pixel", json!({"x": 8, "y": 8})).unwrap()).unwrap();
+            [px[0], px[1], px[2]]
+        };
+        let base_green = pixel(&mut s);
+        assert!(base_green[1] > 0.9 && base_green[0] < 0.1, "base pixel is green: {base_green:?}");
+
+        s.execute("layer.layerStyle.colorOverlay", json!({"color": "#ff0000"})).unwrap();
+        let with_overlay = pixel(&mut s);
+        assert!(with_overlay[0] > 0.9 && with_overlay[1] < 0.1, "overlay pixel is red: {with_overlay:?}");
+
+        // Hide master effects group (no index given).
+        s.execute("layer.layerStyle.setVisible", json!({"visible": false})).unwrap();
+        let hidden = pixel(&mut s);
+        assert_eq!(hidden, base_green, "hidden effects group does not change the composite");
+
+        // Undo restores the effects group.
+        s.execute("edit.undo", json!({})).unwrap();
+        assert_eq!(pixel(&mut s), with_overlay, "undo restores visible effects group");
+
+        // Redo re-hides the effects group.
+        s.execute("edit.redo", json!({})).unwrap();
+        assert_eq!(pixel(&mut s), base_green, "redo hides effects group again");
+
+        // Toggle visibility back on.
+        s.execute("layer.layerStyle.setVisible", json!({})).unwrap();
+        assert_eq!(pixel(&mut s), with_overlay, "toggle restores effects group");
+    }
+
+    #[test]
+    fn set_visible_rejects_bad_params() {
+        let mut s = session();
+        // Layer has no effects yet -> error.
+        assert!(s.execute("layer.layerStyle.setVisible", json!({})).is_err());
+        assert!(s.execute("layer.layerStyle.setVisible", json!({"index": 0})).is_err());
+
+        s.execute("layer.layerStyle.dropShadow", json!({})).unwrap();
+        // Index out of bounds -> error.
+        assert!(s.execute("layer.layerStyle.setVisible", json!({"index": 5})).is_err());
+        // Non-existent layer -> error.
+        assert!(s.execute("layer.layerStyle.setVisible", json!({"layer": 999_999})).is_err());
     }
 }

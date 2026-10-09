@@ -152,6 +152,41 @@ fn a_configured_but_disabled_effect_stays_discoverable_in_the_panel() {
     assert!(effect_row.is_positive(), "a configured disabled effect remains visible for discovery");
 }
 
+#[test]
+fn clicking_effects_eye_toggles_visibility() {
+    let mut session = photocraft_engine::Session::new();
+    session.execute("file.new", json!({"width": 64, "height": 48})).unwrap();
+    let layer_id = session.execute("layer.new.layer", json!({"name": "Styled"})).unwrap()["layer"].as_u64().unwrap();
+    session.execute("layer.layerStyle.dropShadow", json!({"layer": layer_id})).unwrap();
+
+    let mut h = harness(session, 1.0, "promedium", 290.0);
+    let effect_row = h.get_by_label("Drop Shadow").rect();
+    assert!(effect_row.is_positive());
+
+    // Click the Drop Shadow eye (left + 6..24, centered vertically)
+    let eye_center = pos2(effect_row.left() + 15.0, effect_row.center().y);
+    click(&mut h, eye_center);
+
+    // Verify Drop Shadow is now disabled
+    let doc = &h.state().session.active().unwrap().doc;
+    let l = doc.layer(photocraft_doc::LayerId(layer_id)).unwrap();
+    assert!(!l.effects.items[0].enabled(), "individual effect is hidden after clicking eye");
+
+    // Click again to re-enable
+    click(&mut h, eye_center);
+    let doc = &h.state().session.active().unwrap().doc;
+    let l = doc.layer(photocraft_doc::LayerId(layer_id)).unwrap();
+    assert!(l.effects.items[0].enabled(), "individual effect is shown after clicking eye again");
+
+    // Now click the Effects group eye
+    let effects_row = h.get_by_label("Effects").rect();
+    let group_eye_center = pos2(effects_row.left() + 15.0, effects_row.center().y);
+    click(&mut h, group_eye_center);
+    let doc = &h.state().session.active().unwrap().doc;
+    let l = doc.layer(photocraft_doc::LayerId(layer_id)).unwrap();
+    assert!(!l.effects.enabled, "effects group is hidden after clicking eye");
+}
+
 fn groups_open(s: &photocraft_engine::Session) -> Vec<bool> {
     s.active().unwrap().doc.walk().into_iter().filter_map(|(_, _, l)| if let LayerContent::Group(g) = &l.content { Some(g.expanded) } else { None }).collect()
 }

@@ -288,6 +288,18 @@ impl Effect {
         }
     }
 
+    /// Switch this instance on or off.
+    pub fn set_enabled(&mut self, enabled: bool) {
+        match self {
+            Effect::DropShadow(s) | Effect::InnerShadow(s) => s.common.enabled = enabled,
+            Effect::OuterGlow(g) | Effect::InnerGlow(g) => g.common.enabled = enabled,
+            Effect::Stroke(s) => s.common.enabled = enabled,
+            Effect::ColorOverlay { common, .. } | Effect::GradientOverlay { common, .. } | Effect::PatternOverlay { common, .. } => common.enabled = enabled,
+            Effect::Satin(s) => s.common.enabled = enabled,
+            Effect::BevelEmboss(b) => b.enabled = enabled,
+        }
+    }
+
     /// Short label for UIs.
     pub fn label(&self) -> &'static str {
         match self {
@@ -337,5 +349,20 @@ pub struct GlobalLight {
 impl Default for GlobalLight {
     fn default() -> Self {
         GlobalLight { angle: 120.0, altitude: 30.0 }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_enabled_toggles_effect_visibility() {
+        let mut fx = Effect::default_drop_shadow();
+        assert!(fx.enabled());
+        fx.set_enabled(false);
+        assert!(!fx.enabled());
+        fx.set_enabled(true);
+        assert!(fx.enabled());
     }
 }

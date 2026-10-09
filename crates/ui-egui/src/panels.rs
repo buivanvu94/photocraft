@@ -1558,7 +1558,7 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     crate::layer_reveal::scroll_to_row(ui, top);
                 }
                 if !l.effects.items.is_empty() && fx_collapsed.iter().all(|id| *id != l.id) {
-                    effect_rows(app, ui, l, depth);
+                    effect_rows(app, ui, l, depth, &mut actions);
                 }
                 crate::smart_ui::filter_rows(app, ui, l, depth, &mut actions);
             }
@@ -2745,15 +2745,17 @@ fn layer_drag_and_drop(
 }
 
 /// Photoshop shows a layer's effects as indented sub-rows ("Effects", then each effect).
-fn effect_rows(app: &mut PhotocraftApp, ui: &mut egui::Ui, l: &Layer, depth: usize) {
+fn effect_rows(app: &mut PhotocraftApp, ui: &mut egui::Ui, l: &Layer, depth: usize, actions: &mut Vec<(String, Value)>) {
     let t = Tokens::get(ui.ctx());
     let indent = 30.0 + depth as f32 * 14.0 + 34.0;
-    let mut rows: Vec<(String, bool, Option<&'static str>)> = vec![("Effects".into(), l.effects.enabled, None)];
-    for e in &l.effects.items {
+    let mut rows: Vec<(String, bool, bool, Option<&'static str>, Option<usize>)> =
+        vec![("Effects".into(), l.effects.enabled, l.effects.enabled, None, None)];
+    for (idx, e) in l.effects.items.iter().enumerate() {
         let kind = crate::layer_style::KINDS.iter().find(|k| k.1 == e.label()).map(|k| k.0);
-        rows.push((e.label().to_string(), e.enabled(), kind));
+        let on = e.enabled() && l.effects.enabled;
+        rows.push((e.label().to_string(), e.enabled(), on, kind, Some(idx)));
     }
-    for (i, (name, on, kind)) in rows.into_iter().enumerate() {
+    for (i, (name, shown, on, kind, idx)) in rows.into_iter().enumerate() {
         let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::click());
         if !ui.is_rect_visible(rect) {
             continue;
@@ -2765,8 +2767,16 @@ fn effect_rows(app: &mut PhotocraftApp, ui: &mut egui::Ui, l: &Layer, depth: usi
             ui.painter().line_segment([pos2(rect.left() + 30.0, rect.top()), pos2(rect.left() + 30.0, rect.bottom())], Stroke::new(1.0, t.separator));
         }
         let eye = Rect::from_min_size(pos2(rect.left() + 6.0, rect.center().y - 9.0), vec2(18.0, 18.0));
-        if on {
+        let eye_resp = ui.interact(eye, ui.id().with(("fx-eye", l.id.0, i)), Sense::click());
+        if shown {
             icons::paint(ui, eye, "eye", 12.0, t.icon);
+        }
+        if eye_resp.clicked() {
+            let mut p = json!({"layer": l.id.0, "visible": !shown});
+            if let Some(idx) = idx {
+                p["index"] = json!(idx);
+            }
+            actions.push(("layer.layerStyle.setVisible".into(), p));
         }
         let x = rect.left() + indent + if i == 0 { 0.0 } else { 16.0 };
         if i == 0 {
@@ -2783,7 +2793,7 @@ fn effect_rows(app: &mut PhotocraftApp, ui: &mut egui::Ui, l: &Layer, depth: usi
             if on { t.text_dim } else { t.text_faint },
         );
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name.clone()));
-        if resp.double_clicked() {
+        if !eye_resp.clicked() && resp.double_clicked() {
             crate::layer_style::open(app, kind);
         }
     }
