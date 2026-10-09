@@ -152,8 +152,6 @@ impl Focus {
                 | Key::Space
                 | Key::Tab
                 | Key::Escape
-                | Key::Backspace
-                | Key::Delete
                 | Key::Home
                 | Key::End
                 | Key::PageUp
@@ -163,7 +161,9 @@ impl Focus {
             Focus::None => true,
             Focus::Widget => sc.modifiers.command || !navigation,
             Focus::Text => {
-                let text_edit = !sc.modifiers.alt && matches!(k, Key::A | Key::C | Key::X | Key::V | Key::Z | Key::Y) || navigation;
+                let text_edit = !sc.modifiers.alt && matches!(k, Key::A | Key::C | Key::X | Key::V | Key::Z | Key::Y)
+                    || navigation
+                    || matches!(k, Key::Backspace | Key::Delete);
                 function || (sc.modifiers.command && !text_edit)
             }
         }
