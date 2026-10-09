@@ -830,8 +830,13 @@ fn build() -> Vec<CommandSpec> {
             params: r##"{"document":index?}"##,
             enabled: has_doc,
             run: |s, p| {
-                let i = p.get("document").and_then(Value::as_u64).map(|v| v as usize).or(s.active_index()).ok_or(EngineError::NoDocument)?;
-                let d = s.documents().get(i).ok_or(EngineError::NoDocument)?;
+                let d = match p.get("document") {
+                    Some(v) => {
+                        let i = v.as_u64().and_then(|v| usize::try_from(v).ok()).ok_or_else(|| bad("document.inspect", "`document` must be an index"))?;
+                        s.documents().get(i).ok_or_else(|| EngineError::Other(format!("no document at index {i}")))?
+                    }
+                    None => s.active().ok_or(EngineError::NoDocument)?,
+                };
                 Ok(inspect::document(d))
             },
             journal: false,
@@ -845,7 +850,8 @@ fn build() -> Vec<CommandSpec> {
             enabled: has_doc,
             run: |s, p| {
                 let i = p.get("document").and_then(Value::as_u64).ok_or_else(|| bad("document.activate", "missing `document`"))?;
-                if s.set_active(i as usize) { Ok(Value::Null) } else { Err(EngineError::NoDocument) }
+                let idx = usize::try_from(i).map_err(|_| bad("document.activate", "`document` out of range"))?;
+                if s.set_active(idx) { Ok(Value::Null) } else { Err(EngineError::Other(format!("no document at index {idx}"))) }
             },
             journal: false,
         },
