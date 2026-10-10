@@ -608,4 +608,3 @@ fn selecting_mask_thumbnail_toggles_swatches_to_mask_colors_and_back() {
     assert!(h.state().ui.mask_target, "new adjustment layer targets its mask");
     assert_eq!(h.state().session.tools.foreground, grey);
 }
-

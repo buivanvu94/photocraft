@@ -838,8 +838,7 @@ impl PhotocraftApp {
         } else {
             jobs_ui::run(self, id, params)
         };
-        let creates_adjustment_or_fill =
-            id.starts_with("layer.newAdjustmentLayer.") || id.starts_with("layer.newFillLayer.");
+        let creates_adjustment_or_fill = id.starts_with("layer.newAdjustmentLayer.") || id.starts_with("layer.newFillLayer.");
         if r.is_ok() && (ADDS_LAYER_MASK.contains(&id) || creates_adjustment_or_fill) {
             // Adding a layer mask targets it, as in Photoshop (#2166).
             self.ui.mask_target = true;

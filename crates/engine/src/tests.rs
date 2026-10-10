@@ -647,7 +647,6 @@ fn default_colors_with_mask_targeted_resets_to_mask_colors() {
     assert_eq!(s.tools.background, [1.0, 1.0, 1.0, 1.0]);
 }
 
-
 #[test]
 fn fill_layer_pixel_rewrites_refresh_the_effect_maps() {
     // A pixel-only rewrite of a fill layer's cache (what Image › Transform and friends do)
