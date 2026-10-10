@@ -1711,6 +1711,7 @@
 	Scratch: {size}	Trabalho: {size}
 	Untagged {mode}	{mode} sem marcação
 	{w} px x {h} px ({ppi} ppi)	{w} px x {h} px ({ppi} ppi)
+	{w} x {h} ({ppi} ppi)	{w} x {h} ({ppi} ppi)
 	Resolution: {dpi} pixels/inch	Resolução: {dpi} pixels/polegada
 	Doc: {w} × {h} px	Doc: {w} × {h} px
 	Frame {current} / {total}	Quadro {current} / {total}

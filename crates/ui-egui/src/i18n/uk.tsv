@@ -615,6 +615,7 @@
 	Resolution:	Роздільність:
 	Resolution: {dpi} pixels/inch	Роздільність: {dpi} пікселів/дюйм
 	{w} px x {h} px ({ppi} ppi)	{w} пкс x {h} пкс ({ppi} ppi)
+	{w} x {h} ({ppi} ppi)	{w} x {h} ({ppi} ppi)
 	Pixels:	Пікселі:
 	Pixel Length:	Довжина в пікселях:
 	Logical Length:	Логічна довжина:

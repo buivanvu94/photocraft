@@ -699,10 +699,20 @@ impl Default for UnitsAndRulers {
 }
 
 impl UnitsAndRulers {
-    /// Format a length in document pixels in the ruler unit, e.g. `"2.50 in"`.
+    /// Format a length in document pixels in the ruler unit, e.g. `"2.50"`.
     pub fn format(&self, px: f64, dpi: f64, extent: f64) -> String {
         let v = self.rulers.from_px(px, dpi, extent, self.point_size.per_inch());
         format!("{:.*}", self.rulers.decimals(), v)
+    }
+
+    /// Format a length with unit suffix in the ruler unit, e.g. `"2.50 in"`, `"100.0%"`, `"2400 px"`.
+    pub fn format_with_unit(&self, px: f64, dpi: f64, extent: f64) -> String {
+        let val = self.format(px, dpi, extent);
+        if self.rulers == Unit::Percent {
+            format!("{val}%")
+        } else {
+            format!("{val} {}", self.rulers.suffix())
+        }
     }
 }
 

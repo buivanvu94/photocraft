@@ -3334,6 +3334,7 @@ cameraRaw	Yellow	Κίτρινο
 	open source	ανοιχτού κώδικα
 	{size} (was {old})	{size} (ήταν {old})
 	{w} px x {h} px ({ppi} ppi)	{w} px x {h} px ({ppi} ppi)
+	{w} x {h} ({ppi} ppi)	{w} x {h} ({ppi} ppi)
 	…and {n} more	…και {n} ακόμη
 	125%	125%
 	150%	150%

@@ -251,6 +251,12 @@ fn units_convert_both_ways() {
     assert_eq!(Unit::Percent.from_px(450.0, 300.0, 900.0, 72.0), 50.0);
     let r = UnitsAndRulers { rulers: Unit::Centimeters, ..Default::default() };
     assert_eq!(r.format(300.0, 300.0, 0.0), "2.54");
+    assert_eq!(r.format_with_unit(300.0, 300.0, 0.0), "2.54 cm");
+    let in_unit = UnitsAndRulers { rulers: Unit::Inches, ..Default::default() };
+    assert_eq!(in_unit.format_with_unit(1920.0, 72.0, 1920.0), "26.67 in");
+    assert_eq!(in_unit.format_with_unit(1080.0, 72.0, 1080.0), "15.00 in");
+    let pct = UnitsAndRulers { rulers: Unit::Percent, ..Default::default() };
+    assert_eq!(pct.format_with_unit(500.0, 72.0, 1000.0), "50.0%");
 }
 
 #[test]
