@@ -612,3 +612,18 @@ fn path_stroke_rejects_oversized_brush_before_rendering() {
     let result = s.execute("path.stroke", json!({"size": 1e30}));
     assert!(result.is_err(), "path strokes share the bounded paint renderer");
 }
+
+#[test]
+fn curved_shapes_report_exact_content_bounds_without_residue() {
+    let mut s = session(200, 200, 8);
+    let info = s
+        .execute("shape.create", json!({"kind": "ellipse", "rect": [0, 0, 100, 100], "fill": "#0000ff"}))
+        .unwrap();
+    assert_eq!(info["bounds"], json!([0, 0, 100, 100]), "100x100 ellipse has exact 100x100 bounds (#2537)");
+
+    let info_subpixel = s
+        .execute("shape.create", json!({"kind": "ellipse", "rect": [10.5, 10, 100, 100], "fill": "#0000ff"}))
+        .unwrap();
+    assert_eq!(info_subpixel["bounds"], json!([10, 10, 101, 100]), "100x100 ellipse offset by 0.5px spans 101px (#2537)");
+}
+
