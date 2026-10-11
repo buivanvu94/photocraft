@@ -140,9 +140,13 @@ impl Focus {
 
     /// May `sc` fire with this focus? A focused widget keeps its navigation keys (arrows, ↩,
     /// Space, Esc…, plus ⌫ / Delete when it claimed them); a text field keeps everything but ⌘ shortcuts (minus its own editing
-    /// ones: select all, clipboard, undo) and the function keys.
+    /// ones: select all, clipboard, undo) and the function keys. Ctrl+Tab and Ctrl+Shift+Tab switch
+    /// documents whatever has focus, as in Photoshop: no widget or text field edits with them (#2340).
     pub fn allows(self, sc: &KeyboardShortcut) -> bool {
         let k = sc.logical_key;
+        if k == Key::Tab && sc.modifiers.ctrl {
+            return true;
+        }
         let function = matches!(
             k,
             Key::F1
@@ -230,7 +234,7 @@ pub fn dispatch_pressed(app: &mut PhotocraftApp, ctx: &egui::Context, focus: Foc
             // panels instead, #1313): the shortcut took it, so cancel that move.
             ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         }
-        let id = delete_key_command(app, focus, id);
+        let id = delete_key_command(app, id);
         let owner = key_owner(app, ctx);
         dispatch(app, ctx, &id);
         ran = true;
@@ -243,17 +247,22 @@ pub fn dispatch_pressed(app: &mut PhotocraftApp, ctx: &egui::Context, focus: Foc
 
 /// Clear's key (Delete / Backspace) with nothing selected deletes the selected layers, of any
 /// kind, as in Photoshop (#1077): Edit › Clear only clears pixel layers, so on an adjustment, fill,
-/// type or shape layer the key did nothing. A selection, a targeted layer mask, a single channel
-/// or Quick Mask keeps Clear. When a panel widget (such as a layer in the Layers panel) has focus,
-/// Delete / Backspace deletes the layer even if a canvas selection exists (#1621).
-fn delete_key_command(app: &PhotocraftApp, focus: Focus, id: String) -> String {
+/// type or shape layer the key did nothing. A selection, a single channel or Quick Mask keeps Clear.
+/// With the active layer's mask targeted the key edits the mask, never the layer's pixels: a
+/// selection is filled with the background colour in the mask (Photoshop's Delete on a mask), and
+/// with no selection the mask itself is deleted, as Layer › Layer Mask › Delete.
+fn delete_key_command(app: &PhotocraftApp, id: String) -> String {
     if id != "edit.clear" {
         return id;
     }
     let Some(st) = app.session.active() else { return id };
     let composite = st.channel_view.target == photocraft_engine::channel_cmds::ChannelTarget::Composite && st.doc.quick_mask.is_none();
     let mask = app.ui.mask_target && st.active_layer.and_then(|l| st.doc.layer(l)).is_some_and(|l| l.mask.is_some());
-    if (st.doc.selection.is_some() && focus != Focus::Widget) || !composite || mask {
+    if mask && composite {
+        let cmd = if st.doc.selection.is_some() { "edit.fillBackground" } else { "layer.layerMask.delete" };
+        return cmd.into();
+    }
+    if st.doc.selection.is_some() || !composite {
         return id;
     }
     "layer.delete".into()
