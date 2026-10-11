@@ -296,10 +296,6 @@ pub fn show(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         }
     });
     ctx.data_mut(|d| d.insert_temp(thumbs_id(), drawn));
-    if let Some(on) = mask_click {
-        app.ui.mask_target = on;
-        app.sync_mask_targets();
-    }
     for (id, p) in actions {
         if id == "ui.renameChannel" {
             if let Some(i) = p.as_u64().and_then(|i| doc.channels.get(i as usize)) {
@@ -309,6 +305,10 @@ pub fn show(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             continue;
         }
         let _ = app.run(&id, p);
+    }
+    if let Some(on) = mask_click {
+        app.ui.mask_target = on;
+        app.sync_mask_targets();
     }
 }
 
